@@ -1,61 +1,43 @@
-name: Build & Deploy (from private repo)
-
+name: build-and-deploy
 on:
-  workflow_dispatch: {}
-  # You can also auto-run nightly or on push in public repo if you like:
-  # schedule:
-  #   - cron: "0 3 * * *"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout public repo (this repo)
-        uses: actions/checkout@v4
+      - name: Checkout public repo
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955  # v4.3.0
+        with:
+          fetch-depth: 0
 
       - name: Checkout private source repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955  # v4.3.0
         with:
           repository: belasioty/ghb-website
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           path: private-src
 
-      - name: Use Node
-        uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
-          node-version: "20"
+          node-version: 20
 
-      - name: Install deps & build (React)
+      - name: Build site
         working-directory: private-src
         run: |
           npm ci
           npm run build
-
-      - name: Prepare deploy folder
-        run: |
-          rm -rf dist
-          mkdir -p dist/.well-known
-          cp -R private-src/build/* dist/
-          # SPA deep-link fallback
-          cp private-src/build/index.html dist/404.html || true
-          # Ensure GitHub Pages serves dot-folders
-          touch dist/.nojekyll
-          # Custom domain for Pages
-          echo "ghb-emea.com" > dist/CNAME
-          # Microsoft verification file
-          cat > dist/.well-known/microsoft-identity-association.json <<'JSON'
-          {
-            "associatedApplications": [
-              { "applicationId": "234ade1d-7921-43a8-829f-18f533294454" }
-            ]
-          }
-          JSON
+          cp -R build ../public     # adjust if your build output is not ./build
 
       - name: Deploy to gh-pages
-        uses: peaceiris/actions-gh-pages@v4
+        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e  # v4.0.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: dist
-          force_orphan: true
+          publish_dir: ./public
+          cname: ghb-emea.com
