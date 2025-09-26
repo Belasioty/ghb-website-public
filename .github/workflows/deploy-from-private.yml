@@ -1,0 +1,61 @@
+name: Build & Deploy (from private repo)
+
+on:
+  workflow_dispatch: {}
+  # You can also auto-run nightly or on push in public repo if you like:
+  # schedule:
+  #   - cron: "0 3 * * *"
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout public repo (this repo)
+        uses: actions/checkout@v4
+
+      - name: Checkout private source repo
+        uses: actions/checkout@v4
+        with:
+          repository: belasioty/ghb-website
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private-src
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps & build (React)
+        working-directory: private-src
+        run: |
+          npm ci
+          npm run build
+
+      - name: Prepare deploy folder
+        run: |
+          rm -rf dist
+          mkdir -p dist/.well-known
+          cp -R private-src/build/* dist/
+          # SPA deep-link fallback
+          cp private-src/build/index.html dist/404.html || true
+          # Ensure GitHub Pages serves dot-folders
+          touch dist/.nojekyll
+          # Custom domain for Pages
+          echo "ghb-emea.com" > dist/CNAME
+          # Microsoft verification file
+          cat > dist/.well-known/microsoft-identity-association.json <<'JSON'
+          {
+            "associatedApplications": [
+              { "applicationId": "234ade1d-7921-43a8-829f-18f533294454" }
+            ]
+          }
+          JSON
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: dist
+          force_orphan: true
