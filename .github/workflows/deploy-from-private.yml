@@ -4,16 +4,17 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: write  # needed for pushing gh-pages
+  contents: write  # allow pushing
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout this (public) repo
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955  # v4.3.0
         with:
-            fetch-depth: 0
+          fetch-depth: 0
 
       - name: Checkout private source repo
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955  # v4.3.0
@@ -30,8 +31,6 @@ jobs:
       - name: Install deps & build (Vite)
         working-directory: private-src
         env:
-          # Optional: if you need absolute asset paths for custom domain
-          # Set base in vite.config instead if preferred (base: '/')
           PUBLIC_URL: https://ghb-emea.com/
         run: |
           npm ci
@@ -43,15 +42,10 @@ jobs:
         run: |
           rm -rf dist_publish
           mkdir -p dist_publish/.well-known
-          # COPY FROM VITE OUTPUT (dist)
           cp -R private-src/dist/* dist_publish/
-          # SPA deep link fallback
           cp private-src/dist/index.html dist_publish/404.html || true
-          # Let GitHub Pages serve dotfolders
           touch dist_publish/.nojekyll
-          # Custom domain
           echo "ghb-emea.com" > dist_publish/CNAME
-          # Microsoft verification file (or put it in private/public/.well-known/)
           cat > dist_publish/.well-known/microsoft-identity-association.json <<'JSON'
           {
             "associatedApplications": [
@@ -59,14 +53,20 @@ jobs:
             ]
           }
           JSON
-          echo "---- dist_publish root ----"; ls -la dist_publish | sed -n '1,200p'
-          echo "---- .well-known ----"; ls -la dist_publish/.well-known | sed -n '1,200p'
+          echo "---- dist_publish ----"; ls -la dist_publish
 
-      - name: Deploy to gh-pages
-        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e  # v4.0.0
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: dist_publish
-          force_orphan: true
-          commit_message: "deploy: ${{ github.sha }}"
+      - name: Publish to gh-pages (manual push)
+        env:
+          REPO: ${{ github.repository }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd dist_publish
+          git init
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "deploy: ${GITHUB_SHA}"
+          # Force create/update gh-pages as an orphan
+          git branch -M gh-pages
+          git remote add origin "https://x-access-token:${TOKEN}@github.com/${REPO}.git"
+          git push -f origin gh-pages
